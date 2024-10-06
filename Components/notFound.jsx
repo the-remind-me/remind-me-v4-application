@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
+
+const screenWidth = Dimensions.get('window').width;
 
 export const NoScheduleFound = () => (
   <View style={styles.container}>
@@ -17,7 +19,7 @@ export const NoClassToday = () => (
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    width: screenWidth,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -26,6 +28,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 10,
+    textAlign: 'center',
   },
   subText: {
     fontSize: 16,

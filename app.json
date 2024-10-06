@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "remind-me",
-    "slug": "remind-me",
+    "name": "remind_me_test",
+    "slug": "remind_me_test",
     "version": "4.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -19,14 +19,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.biplabroy.remind-me"
+      "package": "com.biplabroy.remind_me_test"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "devs":{
-      "lead":"Biplab Roy"
+    "devs": {
+      "lead": "Biplab Roy"
     }
-
   }
 }

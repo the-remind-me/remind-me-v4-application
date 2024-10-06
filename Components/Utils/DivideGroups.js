@@ -4,6 +4,7 @@ export async function divideSchedule(schedule, Group) {
     console.log("Dividing schedule into groups...");
 
     const groups = { Group1: {}, Group2: {} };
+    await AsyncStorage.setItem("ID",schedule.ID)
     Object.keys(schedule.schedule).forEach((day) => {
         groups.Group1[day] = [];
         groups.Group2[day] = [];
@@ -25,14 +26,6 @@ export async function divideSchedule(schedule, Group) {
     } catch (error) {
         console.error("Error saving schedules:", error);
     }
-    console.log(
-        "============================================================================"
-    );
-    console.log("Schedule divided into groups:", groups.Group1);
-    console.log(
-        "============================================================================"
-    );
-    console.log("Schedule divided into groups:", groups.Group2);
 
     return "Divide Done!!";
 }

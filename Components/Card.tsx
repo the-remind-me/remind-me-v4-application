@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text } from "react-native";
 
 interface ClassInfo {
   Course_Name: string;
@@ -18,7 +18,6 @@ interface ClassCardProps {
 }
 
 const ClassCard: React.FC<ClassCardProps> = ({ classInfo, position }) => {
-  console.log(position);
 
   const getCardStyle = () => {
     let baseStyle = "mb-4 p-4 border-[1.5px] rounded-xl ";
