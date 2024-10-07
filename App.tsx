@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Modal,
+  Dimensions,
 } from "react-native";
 import PagerView from "react-native-pager-view";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -19,6 +20,7 @@ import MyPicker from "./Components/picker";
 import { NoClassToday } from "./Components/notFound";
 import * as Notifications from "expo-notifications";
 import Feather from "@expo/vector-icons/Feather";
+import Carousel from "react-native-reanimated-carousel";
 
 // Prevent the splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -42,6 +44,8 @@ const App = () => {
   const [isPickerModalVisible, setIsPickerModalVisible] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedId, setSelectedId] = useState("");
+
+  const width = Dimensions.get("window").width;
 
   useEffect(() => {
     async function prepare() {
@@ -114,7 +118,10 @@ const App = () => {
   const onLayoutRootView = useCallback(async () => {
     if (isAppReady) {
       // This tells the splash screen to hide immediately
-      await SplashScreen.hideAsync();
+      // hide splash screen after 2 seconds
+      setTimeout(async () => {
+        await SplashScreen.hideAsync();
+      }, 1000);
     }
   }, [isAppReady]);
 
@@ -175,7 +182,7 @@ const App = () => {
             onPress={() => setIsPickerModalVisible(true)}
             className="px-3 py-2 rounded-lg"
           >
-            <Feather name="edit" size={24} color="black" />
+            <Feather name="edit" size={24} color="white" />
           </TouchableOpacity>
         </View>
 
@@ -185,7 +192,7 @@ const App = () => {
           visible={isPickerModalVisible}
           onRequestClose={() => setIsPickerModalVisible(false)}
         >
-          <View className="flex-1 justify-center items-center bg-[#000000b2]">
+          <View className="flex-1 justify-center items-center bg-[#00000095]">
             <View className="bg-white rounded-lg p-4 w-11/12 max-h-5/6">
               <MyPicker
                 onClose={() => {
@@ -196,31 +203,42 @@ const App = () => {
             </View>
           </View>
         </Modal>
-        <View className="bg-indigo-100 py-4">
-          <Text className="text-2xl font-bold text-center text-indigo-800">
-            Today's Schedule
-          </Text>
-          <FlatList
-            horizontal={true}
-            className="p-2"
-            showsHorizontalScrollIndicator={false}
-            data={getTodaySchedule()}
-            renderItem={({ item }) => (
-              <ClassCard classInfo={item} position="today" />
-            )}
-            keyExtractor={(item, index) => `today-${item.Period}-${index}`}
-            ListEmptyComponent={<NoClassToday />}
-          />
+        <View className="bg-indigo-100 py-3 h-60">
+          {getTodaySchedule().length > 0 ? (
+            <>
+              <Text className="text-2xl font-bold text-center text-indigo-800">
+                {new Date().toLocaleString("en-us", { weekday: "long" })}'s
+                Schedule
+              </Text>
+              <Carousel
+                loop={false}
+                mode="parallax"
+                modeConfig={{
+                  parallaxScrollingScale: 0.9,
+                  parallaxScrollingOffset: 50,
+                  parallaxAdjacentItemScale: 0.8,
+                }}
+                width={width}
+                height={200}
+                autoPlay={false}
+                data={getTodaySchedule()}
+                scrollAnimationDuration={1000}
+                renderItem={({ item }) => <ClassCard classInfo={item} />}
+              />
+            </>
+          ) : (
+            <NoClassToday />
+          )}
         </View>
-        <View className="flex-1 bg-indigo-50">
-          <View className="p-2 flex-row justify-evenly bg-indigo-200">
+        <View className="flex-1 bg-indigo-100">
+          <View className="p-2 flex-row justify-evenly bg-indigo-100">
             {days.map((day, index) => (
               <Text
                 key={day}
                 onPress={() => handleDayPress(index)}
-                className={`my-2 mx-2 p-2 px-4 ${
+                className={`mx-2 p-2 px-4 ${
                   selectedDayIndex === index
-                    ? "bg-indigo-600 text-white rounded-lg"
+                    ? "border-b-4 border-indigo-600 text-indigo-800 rounded-lg"
                     : "text-indigo-800"
                 }`}
               >

@@ -2,9 +2,9 @@ import React from "react";
 import { View, Text } from "react-native";
 
 interface ClassInfo {
+  Period: string;
   Course_Name: string;
   Instructor: string;
-  Time: string;
   Room: string;
   Class_type: string;
   Group: string;
@@ -14,10 +14,9 @@ interface ClassInfo {
 
 interface ClassCardProps {
   classInfo: ClassInfo;
-  position?: string;
 }
 
-const ClassCard: React.FC<ClassCardProps> = ({ classInfo, position }) => {
+const ClassCard: React.FC<ClassCardProps> = ({ classInfo }) => {
 
   const getCardStyle = () => {
     let baseStyle = "mb-4 p-4 border-[1.5px] rounded-xl ";
@@ -43,26 +42,21 @@ const ClassCard: React.FC<ClassCardProps> = ({ classInfo, position }) => {
     return baseStyle;
   };
 
-  const renderSmallCard = () => (
-    <View className={`${getCardStyle()} ${position === "today" ? "mx-4 my-2 w-60" : ""}`}>
-      <Text className="text-lg font-medium">
-        {classInfo.Start_Time} - {classInfo.End_Time}
-      </Text>
-      <Text className="text-base font-medium text-slate-900 my-1">
-        {classInfo.Course_Name}
-      </Text>
-      <Text className="text-sm text-slate-900">{classInfo.Instructor}</Text>
-      {classInfo.Class_type !== "Free" && (
-        <Text className="text-sm underline mt-2">{classInfo.Room}</Text>
-      )}
-    </View>
-  );
+  // convert 24 hour time to 12 hour time
+  const convertTime = (time: string) => {
+    const [hours, minutes] = time.split(":");
+    const hour = parseInt(hours);
+    const minute = parseInt(minutes);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minute.toString().padStart(2, "0")} ${ampm}`;
+  };
 
-  const renderLargeCard = () => (
+  return (
     <View className={getCardStyle()}>
       <View className="flex-row justify-between items-center">
         <Text className="text-2xl font-medium">
-          {classInfo.Start_Time} - {classInfo.End_Time}
+          {convertTime(classInfo.Start_Time)} - {convertTime(classInfo.End_Time)}
         </Text>
         <View className={getTypeStyle()}>
           <Text className="text-white font-semibold">
@@ -81,8 +75,6 @@ const ClassCard: React.FC<ClassCardProps> = ({ classInfo, position }) => {
       )}
     </View>
   );
-
-  return position === "today" ? renderSmallCard() : renderLargeCard();
 };
 
 export default ClassCard;

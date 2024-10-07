@@ -10,6 +10,7 @@ import {
 import { Dropdown } from "react-native-element-dropdown";
 import { divideSchedule } from "./Utils/DivideGroups";
 import NetInfo from "@react-native-community/netinfo";
+import Feather from "@expo/vector-icons/Feather";
 
 interface MyPickerProps {
   onClose: () => void;
@@ -140,7 +141,6 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
   useEffect(() => {
     const id = `${selectedUniversity}-${selectedProgram}-${selectedSemester}-${selectedSection}`;
     setSelectedId(id);
-    console.log(id);
   }, [selectedSection, group]);
 
   const getScheduleFromBackend = async () => {
@@ -180,7 +180,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
       <View className="flex-row justify-between items-center mb-4">
         <Text className="text-xl font-bold">Select Schedule</Text>
         <TouchableOpacity onPress={onClose} className="p-2">
-          <Text className="text-blue-500">Close</Text>
+          <Feather name="x" size={24} color="black" />
         </TouchableOpacity>
       </View>
       {isLoading ? (
@@ -277,13 +277,20 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
                 onClose();
               }}
               disabled={!selectedSection || isLoading}
-              className={`mt-6 p-4 rounded-md ${
+              className={`mt-6 p-4 rounded-md flex-row justify-center items-center ${
                 selectedSection && !isLoading ? "bg-blue-500" : "bg-gray-400"
               }`}
             >
-              <Text className="text-black text-center font-bold">
-                Find Schedule
-              </Text>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <Feather name="search" size={24} color="white" />
+                  <Text className="text-white text-center font-bold">
+                    Find Schedule
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>

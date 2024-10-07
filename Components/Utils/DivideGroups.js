@@ -1,7 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export async function divideSchedule(schedule, Group) {
-    console.log("Dividing schedule into groups...");
 
     const groups = { Group1: {}, Group2: {} };
     await AsyncStorage.setItem("ID",schedule.ID)
@@ -22,7 +21,6 @@ export async function divideSchedule(schedule, Group) {
             await AsyncStorage.setItem("GroupSchedule", JSON.stringify(groups.Group1));
         else
             await AsyncStorage.setItem("GroupSchedule", JSON.stringify(groups.Group2));
-        console.log("Schedules saved to AsyncStorage");
     } catch (error) {
         console.error("Error saving schedules:", error);
     }
