@@ -1,81 +1,73 @@
-name: Deploy APK and Create Release
+name: Build and Release APK
 
 on:
   push:
     branches:
-      - main  # Change to your main branch name
-
-permissions:
-  contents: write  # Allow actions to write to the repository contents
+      - main  # Change this to the branch you want to trigger the workflow on
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
+    - name: Checkout Repository
+      uses: actions/checkout@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '18'
+    - name: Setup Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '18'  # Specify the Node.js version you want to use
 
-      # Read the version from app.json and store it in the environment variable
-      - name: Read version from app.json
-        id: version
-        run: |
-          echo "VERSION=$(node -p "require('./app.json').expo.version")" >> $GITHUB_ENV
+    - name: Set Version
+      run: echo "VERSION=$(node -p "require('./app.json').expo.version")" >> $GITHUB_ENV
 
-      # Create a release folder
-      - name: Create Release Folder
-        run: mkdir -p release
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      with:
+        tag_name: v${{ env.VERSION }}
+        release_name: Release v${{ env.VERSION }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Create a new GitHub Release
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ env.VERSION }}
-          release_name: Release v${{ env.VERSION }}
-          body: |
-            APKs for version ${{ env.VERSION }} have been released.
+    - name: Upload APKs
+      id: upload_apks
+      run: |
+        echo '{
+          "version": "${{ env.VERSION }}",
+          "apks": [
+        ' > release/version.json
 
-      # Upload APKs to the release
-      - name: Upload APKs to Release
-        run: |
-          ABIS=("armeabi-v7a" "arm64-v8a" "x86" "x86_64")
-          for ABI in "${ABIS[@]}"; do
-            APK_PATH="build/app-${ABI}-release.apk"  # Adjust this if the APKs are located elsewhere
-            if [ -f "$APK_PATH" ]; then
-              echo "Uploading APK: $APK_PATH"
-              curl -s -X POST "${{ steps.create_release.outputs.upload_url }}?name=app-${ABI}-v${{ env.VERSION }}.apk" \
-                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Content-Type: application/vnd.android.package-archive" \
-                --data-binary @"$APK_PATH"
-            else
-              echo "APK for ABI $ABI not found at $APK_PATH"
-            fi
-          done
+        APK_FILES=(
+          "build/app-armeabi-v7a-release.apk"
+          "build/app-arm64-v8a-release.apk"
+          "build/app-x86-release.apk"
+          "build/app-x86_64-release.apk"
+        )
 
-      # Create version.json with URLs to all uploaded APKs
-      - name: Create version.json
-        run: |
-          echo '{ "version": "'${{ env.VERSION }}'", "apks": [' > release/version.json
-          ABIS=("armeabi-v7a" "arm64-v8a" "x86" "x86_64")
-          for ABI in "${ABIS[@]}"; do
-            APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}/app-${ABI}-v${{ env.VERSION }}.apk"
-            echo '  {"abi": "'$ABI'", "url": "'$APK_URL'"},' >> release/version.json
-          done
-          # Remove the last comma and close the JSON array
-          sed -i '$ s/,$//' release/version.json
-          echo ']}' >> release/version.json
+        for APK in "${APK_FILES[@]}"; do
+          BASENAME=$(basename "$APK")
+          echo "Uploading $BASENAME..."
+          RESPONSE=$(curl -X POST \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            --data-binary @"$APK" \
+            "${{ steps.create_release.outputs.upload_url }}")
+          URL=$(echo "$RESPONSE" | jq -r .url)
+          echo "Uploaded $BASENAME: $URL"
+          echo "  { \"name\": \"$BASENAME\", \"url\": \"$URL\" }," >> release/version.json
+        done
 
-      # Deploy version.json to GitHub Pages
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./release
+        # Remove the last comma and close the JSON array
+        sed -i '$ s/,$//' release/version.json
+        echo '  ]
+        }' >> release/version.json
+
+    - name: Push version.json to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./release
+        publish_branch: gh-pages
