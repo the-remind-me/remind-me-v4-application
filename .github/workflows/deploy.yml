@@ -21,18 +21,11 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install Dependencies
-        run: npm install  # or yarn install
-
       # Read the version from app.json and store it in the environment variable
       - name: Read version from app.json
         id: version
         run: |
           echo "VERSION=$(node -p "require('./app.json').expo.version")" >> $GITHUB_ENV
-
-      # Build the APKs for all ABIs
-      - name: Build APKs
-        run: npm run build  # Ensure this command builds APKs for all ABIs
 
       # Create a release folder
       - name: Create Release Folder
