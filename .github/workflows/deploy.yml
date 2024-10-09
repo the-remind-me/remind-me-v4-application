@@ -23,7 +23,7 @@ jobs:
 
       # Read the version from app.json and store it in the environment variable
       - name: Read version from app.json
-        run: echo "VERSION=$(node -p \"require('./app.json').expo.version\")" >> $GITHUB_ENV
+        run: echo "VERSION=$(node -p 'require(\"./app.json\").expo.version')" >> $GITHUB_ENV
 
       # Build the APK
       - name: Build APK
@@ -65,7 +65,7 @@ jobs:
         run: |
           APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}/app-v${{ env.VERSION }}.apk"
           echo '{
-            "version": "${{ env.VERSION }}",
+            "version": "'${{ env.VERSION }}'",
             "apkUrl": "'$APK_URL'"
           }' > build/version.json
 
