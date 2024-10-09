@@ -13,7 +13,7 @@
     },
     "platforms": ["ios", "android"],
     "ios": {
-      "bundleIdentifier": "com.biplabroy.remind_me_test",
+      "bundleIdentifier": "com.biplabroy.remindme",
       "supportsTablet": true
     },
     "android": {
