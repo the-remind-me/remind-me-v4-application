@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text } from "react-native";
+import { convertTime } from "./Utils/utils";
 
 interface ClassInfo {
   Period: string;
@@ -19,7 +20,7 @@ interface ClassCardProps {
 const ClassCard: React.FC<ClassCardProps> = ({ classInfo }) => {
 
   const getCardStyle = () => {
-    let baseStyle = "mb-4 p-4 border-[1.5px] rounded-xl ";
+    let baseStyle = "mb-4 p-3 border-2 rounded-xl ";
     if (classInfo.Class_type === "Free") {
       baseStyle += "border-red-300 bg-red-50";
     } else if (classInfo.Class_type === "Lab") {
@@ -31,7 +32,7 @@ const ClassCard: React.FC<ClassCardProps> = ({ classInfo }) => {
   };
 
   const getTypeStyle = () => {
-    let baseStyle = "rounded-full px-4 py-2 ";
+    let baseStyle = "rounded-full px-3 py-2 ";
     if (classInfo.Class_type === "Free") {
       baseStyle += "bg-red-700";
     } else if (classInfo.Class_type === "Lab") {
@@ -40,16 +41,6 @@ const ClassCard: React.FC<ClassCardProps> = ({ classInfo }) => {
       baseStyle += "bg-green-700";
     }
     return baseStyle;
-  };
-
-  // convert 24 hour time to 12 hour time
-  const convertTime = (time: string) => {
-    const [hours, minutes] = time.split(":");
-    const hour = parseInt(hours);
-    const minute = parseInt(minutes);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minute.toString().padStart(2, "0")} ${ampm}`;
   };
 
   return (

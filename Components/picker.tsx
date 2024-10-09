@@ -11,10 +11,13 @@ import { Dropdown } from "react-native-element-dropdown";
 import { divideSchedule } from "./Utils/DivideGroups";
 import NetInfo from "@react-native-community/netinfo";
 import Feather from "@expo/vector-icons/Feather";
+import ErrorPage from "./error";
 
 interface MyPickerProps {
   onClose: () => void;
 }
+
+const API_URL = "https://remindme.globaltfn.tech";
 
 const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
   const [data, setData] = useState<string[]>([]);
@@ -49,21 +52,18 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
         return;
       }
 
-      const response = await fetch(
-        "http://192.168.0.131:5000/api/schedule/ids"
-      );
+      const response = await fetch(`${API_URL}/api/schedule/ids`);
       if (!response.ok)
         throw new Error(`HTTP error! status: ${response.status}`);
       const fetchedData = await response.json();
       setData(fetchedData.ids);
+      setIsLoading(false);  
     } catch (error) {
       console.error("Failed to fetch schedule:", error);
       ToastAndroid.show(
-        "Failed to fetch schedule. Please check your internet connection and try again.",
+        "Failed to fetch schedule. Issue is with the server.",
         ToastAndroid.LONG
       );
-    } finally {
-      setIsLoading(false);
     }
   }, [checkConnection]);
 
@@ -157,7 +157,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
       }
 
       const response = await fetch(
-        `http://192.168.0.131:5000/api/schedule/find/${selectedId}`
+        `${API_URL}/api/schedule/find/${selectedId}`
       );
       if (!response.ok)
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -190,9 +190,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
         </View>
       ) : !isConnected ? (
         <View className="flex-1 justify-center items-center p-4">
-          <Text className="text-lg text-red-500 mb-4">
-            No Internet Connection
-          </Text>
+          <ErrorPage message="Please check your internet connection and try again." />
           <TouchableOpacity
             onPress={onRefresh}
             className="bg-blue-500 p-3 rounded-md"

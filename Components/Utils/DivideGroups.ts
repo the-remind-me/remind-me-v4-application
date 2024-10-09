@@ -1,9 +1,30 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export async function divideSchedule(schedule, Group) {
+interface Schedule {
+    ID: string;
+    schedule: {
+        [key: string]: ClassInfo[];
+    };
+}
 
-    const groups = { Group1: {}, Group2: {} };
-    await AsyncStorage.setItem("ID",schedule.ID)
+interface ClassInfo {
+    Group: string;
+    [key: string]: any;
+}
+
+interface Groups {
+    Group1: {
+        [key: string]: ClassInfo[];
+    };
+    Group2: {
+        [key: string]: ClassInfo[];
+    };
+}
+
+export async function divideSchedule(schedule: Schedule, Group: string): Promise<string> {
+    const groups: Groups = { Group1: {}, Group2: {} };
+    await AsyncStorage.setItem("ID", schedule.ID);
+
     Object.keys(schedule.schedule).forEach((day) => {
         groups.Group1[day] = [];
         groups.Group2[day] = [];
@@ -17,10 +38,8 @@ export async function divideSchedule(schedule, Group) {
     });
 
     try {
-        if (Group === "Group 1")
-            await AsyncStorage.setItem("GroupSchedule", JSON.stringify(groups.Group1));
-        else
-            await AsyncStorage.setItem("GroupSchedule", JSON.stringify(groups.Group2));
+        const groupSchedule = Group === "Group 1" ? groups.Group1 : groups.Group2;
+        await AsyncStorage.setItem("GroupSchedule", JSON.stringify(groupSchedule));
     } catch (error) {
         console.error("Error saving schedules:", error);
     }
