@@ -66,6 +66,9 @@ jobs:
           sed -i '$ s/,$//' release/version.json
           echo ']}' >> release/version.json
 
+      - name: Create a .nojekyll file
+        run: echo > release/.nojekyll  # Ensure GitHub Pages skips Jekyll processing
+
       - name: List working directory contents
         run: ls -R  # Check contents of the working directory
 
