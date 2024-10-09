@@ -3,15 +3,15 @@ name: Deploy APKs and Create Releases
 on:
   push:
     branches:
-      - main  # Change to your main branch name
+      - main
 
 permissions:
-  contents: write  # Allow actions to write to the repository contents
+  contents: write
 
 jobs:
   build: 
     runs-on: ubuntu-latest 
- 
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
@@ -21,43 +21,30 @@ jobs:
         with:
           node-version: '18'
 
-      # Read the version from app.json and store it in the environment variable
       - name: Read version from app.json
         id: version
         run: |
           echo "VERSION=$(node -p "require('./app.json').expo.version")" >> $GITHUB_ENV
 
-      # Create a release folder
       - name: Create Release Folder
         run: mkdir -p release
 
-      # Create a single GitHub Release for all APKs
-      - name: Create GitHub Release
-        id: create_release
-        run: |
-          release_name="Release v${{ env.VERSION }}"
-          tag_name="v${{ env.VERSION }}"
-          echo "Creating release: $release_name"
-          RESPONSE=$(curl -s -X POST "https://api.github.com/repos/${{ github.repository }}/releases" \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -d "{\"tag_name\": \"$tag_name\", \"name\": \"$release_name\", \"body\": \"APKs for version ${{ env.VERSION }} have been released.\"}")
-
-          upload_url=$(echo $RESPONSE | jq -r .upload_url | sed "s/{.*}//")
-
-      # Debugging: List contents of the build directory
-      - name: List build directory
-        run: |
-          echo "Listing APKs in build directory:"
-          ls -al build/
-
-      # Loop through each ABI and upload APKs to the release
-      - name: Upload APKs to Release
-        id: upload_apks
+      - name: Create GitHub Releases and Upload APKs
+        id: create_releases
         run: |
           ABIS=("armeabi-v7a" "arm64-v8a" "x86" "x86_64")
           for ABI in "${ABIS[@]}"; do
-            APK_PATH="build/app-${ABI}-release.apk"  # Adjust this if the APKs are located elsewhere
+            APK_PATH="build/app-${ABI}-release.apk"
             if [ -f "$APK_PATH" ]; then
+              release_name="Release v${{ env.VERSION }} - $ABI"
+              tag_name="v${{ env.VERSION }}-$ABI"
+              echo "Creating release: $release_name"
+              RESPONSE=$(curl -s -X POST "https://api.github.com/repos/${{ github.repository }}/releases" \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -d "{\"tag_name\": \"$tag_name\", \"name\": \"$release_name\", \"body\": \"APK for version ${{ env.VERSION }} - ABI $ABI has been released.\"}")
+
+              upload_url=$(echo $RESPONSE | jq -r .upload_url | sed "s/{.*}//")
+
               echo "Uploading APK: $APK_PATH"
               curl -s -X POST "$upload_url?name=app-${ABI}-v${{ env.VERSION }}.apk" \
                 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
@@ -65,24 +52,23 @@ jobs:
                 --data-binary @"$APK_PATH"
             else
               echo "APK for ABI $ABI not found at $APK_PATH"
-              exit 1  # Fail the job if any APK is not found
             fi
           done
 
-      # Create version.json with URLs to all releases
       - name: Create version.json
         run: |
           echo '{ "version": "'${{ env.VERSION }}'", "apks": [' > release/version.json
           ABIS=("armeabi-v7a" "arm64-v8a" "x86" "x86_64")
           for ABI in "${ABIS[@]}"; do
-            APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}/app-${ABI}-v${{ env.VERSION }}.apk"
+            APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}-${ABI}/app-${ABI}-v${{ env.VERSION }}.apk"
             echo '  {"abi": "'$ABI'", "url": "'$APK_URL'"},' >> release/version.json
           done
-          # Remove the last comma and close the JSON array
           sed -i '$ s/,$//' release/version.json
           echo ']}' >> release/version.json
 
-      # Deploy version.json to GitHub Pages
+      - name: Check release folder contents
+        run: ls release  # Debug step to check contents
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
