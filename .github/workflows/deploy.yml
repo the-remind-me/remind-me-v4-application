@@ -9,9 +9,9 @@ permissions:
   contents: write  # Allow actions to write to the repository contents
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  build: 
+    runs-on: ubuntu-latest 
+ 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
@@ -27,30 +27,31 @@ jobs:
         run: |
           echo "VERSION=$(node -p "require('./app.json').expo.version")" >> $GITHUB_ENV
 
-
       # Create a release folder
       - name: Create Release Folder
         run: mkdir -p release
 
-      # Loop through each ABI and create a release
-      - name: Create GitHub Releases and Upload APKs
-        id: create_releases
+      # Create a single GitHub Release for all APKs
+      - name: Create GitHub Release
+        id: create_release
+        run: |
+          release_name="Release v${{ env.VERSION }}"
+          tag_name="v${{ env.VERSION }}"
+          echo "Creating release: $release_name"
+          RESPONSE=$(curl -s -X POST "https://api.github.com/repos/${{ github.repository }}/releases" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -d "{\"tag_name\": \"$tag_name\", \"name\": \"$release_name\", \"body\": \"APKs for version ${{ env.VERSION }} have been released.\"}")
+
+          upload_url=$(echo $RESPONSE | jq -r .upload_url | sed "s/{.*}//")
+
+      # Loop through each ABI and upload APKs to the release
+      - name: Upload APKs to Release
+        id: upload_apks
         run: |
           ABIS=("armeabi-v7a" "arm64-v8a" "x86" "x86_64")
           for ABI in "${ABIS[@]}"; do
             APK_PATH="build/app-${ABI}-release.apk"  # Adjust this if the APKs are located elsewhere
             if [ -f "$APK_PATH" ]; then
-              # Create a new GitHub Release for the ABI
-              release_name="Release v${{ env.VERSION }} - $ABI"
-              tag_name="v${{ env.VERSION }}-$ABI"
-              echo "Creating release: $release_name"
-              RESPONSE=$(curl -s -X POST "https://api.github.com/repos/${{ github.repository }}/releases" \
-                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -d "{\"tag_name\": \"$tag_name\", \"name\": \"$release_name\", \"body\": \"APK for version ${{ env.VERSION }} - ABI $ABI has been released.\"}")
-
-              upload_url=$(echo $RESPONSE | jq -r .upload_url | sed "s/{.*}//")
-
-              # Upload APK to the release
               echo "Uploading APK: $APK_PATH"
               curl -s -X POST "$upload_url?name=app-${ABI}-v${{ env.VERSION }}.apk" \
                 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
@@ -67,7 +68,7 @@ jobs:
           echo '{ "version": "'${{ env.VERSION }}'", "apks": [' > release/version.json
           ABIS=("armeabi-v7a" "arm64-v8a" "x86" "x86_64")
           for ABI in "${ABIS[@]}"; do
-            APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}-${ABI}/app-${ABI}-v${{ env.VERSION }}.apk"
+            APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}/app-${ABI}-v${{ env.VERSION }}.apk"
             echo '  {"abi": "'$ABI'", "url": "'$APK_URL'"},' >> release/version.json
           done
           # Remove the last comma and close the JSON array
@@ -78,5 +79,5 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ../release
+          github_token: ${{ secrets.GITHUB_TOKEN }} 
+          publish_dir: release
