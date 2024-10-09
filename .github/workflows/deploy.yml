@@ -5,6 +5,9 @@ on:
     branches:
       - main  # Change to your main branch name
 
+permissions:
+  contents: write  # Allow actions to write to the repository contents
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,6 +26,7 @@ jobs:
         id: version
         run: |
           echo "VERSION=$(node -p "require('./app.json').expo.version")" >> $GITHUB_ENV
+
 
       # Create a release folder
       - name: Create Release Folder
