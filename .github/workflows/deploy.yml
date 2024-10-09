@@ -66,8 +66,11 @@ jobs:
           sed -i '$ s/,$//' release/version.json
           echo ']}' >> release/version.json
 
-      - name: Check release folder contents
-        run: ls release  # Debug step to check contents
+      - name: List working directory contents
+        run: ls -R  # Check contents of the working directory
+
+      - name: Check version.json contents
+        run: cat release/version.json  # Ensure version.json was created successfully
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
