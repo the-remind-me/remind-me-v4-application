@@ -21,10 +21,9 @@ jobs:
       - name: Install Dependencies
         run: npm install  # or yarn install
 
-      # Read the version from app.json
+      # Read the version from app.json and store it in the environment variable
       - name: Read version from app.json
-        id: version
-        run: echo "::set-output name=version::$(node -p \"require('./app.json').expo.version\")"
+        run: echo "VERSION=$(node -p \"require('./app.json').expo.version\")" >> $GITHUB_ENV
 
       # Build the APK
       - name: Build APK
@@ -34,7 +33,7 @@ jobs:
       - name: Copy APK to Build Folder
         run: |
           mkdir -p build
-          cp android\app\build\outputs\apk\release\app-armeabi-v7a-release.apk build/app-v${{ steps.version.outputs.version }}.apk
+          cp android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk build/app-v${{ env.VERSION }}.apk
 
       # Create a new GitHub Release
       - name: Create GitHub Release
@@ -43,10 +42,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          release_name: Release v${{ steps.version.outputs.version }}
+          tag_name: v${{ env.VERSION }}
+          release_name: Release v${{ env.VERSION }}
           body: |
-            APK for version ${{ steps.version.outputs.version }} has been released.
+            APK for version ${{ env.VERSION }} has been released.
           draft: false
           prerelease: false
 
@@ -57,16 +56,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build/app-v${{ steps.version.outputs.version }}.apk
-          asset_name: app-v${{ steps.version.outputs.version }}.apk
+          asset_path: ./build/app-v${{ env.VERSION }}.apk
+          asset_name: app-v${{ env.VERSION }}.apk
           asset_content_type: application/vnd.android.package-archive
 
       # Create version.json with the GitHub Release APK URL
       - name: Create version.json
         run: |
-          APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/app-v${{ steps.version.outputs.version }}.apk"
+          APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}/app-v${{ env.VERSION }}.apk"
           echo '{
-            "version": "${{ steps.version.outputs.version }}",
+            "version": "${{ env.VERSION }}",
             "apkUrl": "'$APK_URL'"
           }' > build/version.json
 
