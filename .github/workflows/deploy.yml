@@ -44,6 +44,12 @@ jobs:
 
           upload_url=$(echo $RESPONSE | jq -r .upload_url | sed "s/{.*}//")
 
+      # Debugging: List contents of the build directory
+      - name: List build directory
+        run: |
+          echo "Listing APKs in build directory:"
+          ls -al build/
+
       # Loop through each ABI and upload APKs to the release
       - name: Upload APKs to Release
         id: upload_apks
@@ -59,6 +65,7 @@ jobs:
                 --data-binary @"$APK_PATH"
             else
               echo "APK for ABI $ABI not found at $APK_PATH"
+              exit 1  # Fail the job if any APK is not found
             fi
           done
 
