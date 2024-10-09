@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main  # Change this to the branch you want to trigger the workflow on
+permissions:
+  contents: write  # Allows the workflow to create releases
+  packages: write  # Allows access to packages
 
 jobs:
   build:
