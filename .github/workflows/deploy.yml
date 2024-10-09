@@ -1,0 +1,79 @@
+name: Deploy APK and Create Release
+
+on:
+  push:
+    branches:
+      - main  # Change to your main branch name
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+
+      - name: Install Dependencies
+        run: npm install  # or yarn install
+
+      # Read the version from app.json and store it in the environment variable
+      - name: Read version from app.json
+        id: version
+        run: |
+          echo "VERSION=$(node -p "require('./app.json').expo.version")" >> $GITHUB_ENV
+
+      # Build the APK
+      - name: Build APK
+        run: npm run build  # Replace with your APK build command
+
+      # Copy APK to build folder with version from app.json
+      - name: Copy APK to Build Folder
+        run: |
+          mkdir -p build
+          cp android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk build/app-v${{ env.VERSION }}.apk
+
+      # Create a new GitHub Release
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ env.VERSION }}
+          release_name: Release v${{ env.VERSION }}
+          body: |
+            APK for version ${{ env.VERSION }} has been released.
+          draft: false
+          prerelease: false
+
+      # Upload the APK to the release
+      - name: Upload APK to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build/app-v${{ env.VERSION }}.apk
+          asset_name: app-v${{ env.VERSION }}.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      # Create version.json with the GitHub Release APK URL
+      - name: Create version.json
+        run: |
+          APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}/app-v${{ env.VERSION }}.apk"
+          echo '{
+            "version": "'${{ env.VERSION }}'",
+            "apkUrl": "'$APK_URL'"
+          }' > build/version.json
+
+      # Deploy APK and version.json to GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build
