@@ -17,7 +17,7 @@ interface MyPickerProps {
   onClose: () => void;
 }
 
-const API_URL = "https://remindme.globaltfn.tech";
+const API_URL = "https://api.remindme.globaltfn.tech";
 
 const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
   const [data, setData] = useState<string[]>([]);
@@ -73,7 +73,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
 
   const universities = Array.from(
     new Set(data.map((item) => item.split("-")[0]))
-  );
+  ).sort();
 
   const handleUniversitySelect = (university: string) => {
     setSelectedUniversity(university);
@@ -91,7 +91,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
             .filter((item) => item.startsWith(university))
             .map((item) => item.split("-")[1])
         )
-      );
+      ).sort();
       setPrograms(filteredPrograms);
     }
   };
@@ -112,7 +112,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
             )
             .map((item) => item.split("-")[2])
         )
-      );
+      ).sort();
       setSemesters(filteredSemesters);
     }
   };
@@ -133,7 +133,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
             )
             .map((item) => item.split("-")[3])
         )
-      );
+      ).sort();
       setSections(filteredSections);
     }
   };
@@ -184,19 +184,13 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
         </TouchableOpacity>
       </View>
       {isLoading ? (
-        <View className="flex-1 justify-center items-center p-4">
+        <View className="flex-1 justify-center items-center p-4 h-96">
           <ActivityIndicator size="large" color="#4F46E5" />
           <Text className="mt-4 text-lg text-indigo-700">Loading...</Text>
         </View>
       ) : !isConnected ? (
         <View className="flex-1 justify-center items-center p-4">
-          <ErrorPage message="Please check your internet connection and try again." />
-          <TouchableOpacity
-            onPress={onRefresh}
-            className="bg-blue-500 p-3 rounded-md"
-          >
-            <Text className="text-white font-bold">Retry Connection</Text>
-          </TouchableOpacity>
+          <ErrorPage message="Please check your internet connection and try again." onRetry={onRefresh}/>
         </View>
       ) : (
         <View className="flex-1 items-center justify-center p-4">

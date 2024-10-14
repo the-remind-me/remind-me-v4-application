@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "remind_me_test",
-    "slug": "remind_me_test",
-    "version": "4.1.0",
+    "name": "Remind Me",
+    "slug": "remindme",
+    "version": "4.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -21,13 +21,21 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.biplabroy.remind_me_test"
+      "package": "com.biplabroy.remindme"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "devs": {
-      "lead": "Biplab Roy"
-    }
+      "lead": "Biplab"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/schedule_notification.ogg", "./assets/alarm.ogg"]
+        }
+      ]
+    ]
   }
 }

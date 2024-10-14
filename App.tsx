@@ -16,18 +16,19 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ClassCard from "./Components/Card";
 import MyPicker from "./Components/picker";
-import { NoClassToday } from "./Components/notFound";
+import { NoClassToday, Holiday } from "./Components/notFound";
 import * as Notifications from "expo-notifications";
 import Feather from "@expo/vector-icons/Feather";
 import Carousel from "react-native-reanimated-carousel";
 import { TabView, SceneMap, TabBar } from "react-native-tab-view";
 import { convertTime } from "./Components/Utils/utils";
-import ErrorComponent from "./Components/error"; // Assuming you have this component
+import ErrorComponent from "./Components/error";
+import UpdateComponent from "./Components/update";
+import axios from "axios";
+import NetInfo from "@react-native-community/netinfo";
 
-// Prevent the splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
-// Configure notifications
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -36,12 +37,17 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const width = Dimensions.get("window").width;
-const ITEM_HEIGHT = 100; // Example height for FlatList optimization
+const { width } = Dimensions.get("window");
+const ITEM_HEIGHT = 100;
 
-const DrawerItem = () => <Menu />;
+interface Holiday {
+  _id: string;
+  date: string;
+  name: string;
+  __v: number;
+}
 
-const App = () => {
+const App: React.FC = () => {
   const [schedule, setSchedule] = useState<{ [key: string]: any[] }>({});
   const [days, setDays] = useState<string[]>([]);
   const [index, setIndex] = useState(0);
@@ -50,16 +56,19 @@ const App = () => {
   const [isPickerModalVisible, setIsPickerModalVisible] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedId, setSelectedId] = useState("");
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [isNotificationEnabled, setNotificationEnabled] = useState(false);
+  const [isAlarmEnabled, setAlarmEnabled] = useState(false);
 
   useEffect(() => {
     const prepare = async () => {
       try {
-        // Pre-load data and fonts
         await checkForNewData();
         await setupNotifications();
+        await fetchHolidays();
         setIsAppReady(true);
       } catch (e) {
-        console.warn(e);
+        console.error("Error during app preparation:", e);
       }
     };
 
@@ -67,7 +76,20 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    // Set initial index to today's day
+    const loadSettings = async () => {
+      try {
+        const notificationStatus = await AsyncStorage.getItem("notifications");
+        const alarmStatus = await AsyncStorage.getItem("alarm");
+        setNotificationEnabled(notificationStatus === "true");
+        setAlarmEnabled(alarmStatus === "true");
+      } catch (error) {
+        console.error("Error loading settings:", error);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  useEffect(() => {
     const today = new Date().toLocaleString("en-us", { weekday: "long" });
     const todayIndex = days.findIndex((day) => day === today);
     if (todayIndex !== -1) {
@@ -75,35 +97,153 @@ const App = () => {
     }
   }, [days]);
 
+  const fetchHolidays = async () => {
+    try {
+      const storedHolidays = await AsyncStorage.getItem("holidays");
+      if (storedHolidays) {
+        setHolidays(JSON.parse(storedHolidays));
+      }
+
+      const netInfo = await NetInfo.fetch();
+      if (netInfo.isConnected) {
+        const response = await axios.get<Holiday[]>(
+          "https://api.remindme.globaltfn.tech/api/holiday/all"
+        );
+        setHolidays(response.data);
+        await AsyncStorage.setItem("holidays", JSON.stringify(response.data));
+      }
+    } catch (error) {
+      console.error("Failed to fetch or sync holidays:", error);
+    }
+  };
+
   const setupNotifications = async () => {
     try {
+      await Notifications.setNotificationChannelAsync("schedule", {
+        name: "Schedule notifications",
+        sound: "schedule_notification.ogg",
+        importance: Notifications.AndroidImportance.HIGH,
+      });
+      await Notifications.setNotificationChannelAsync("alarm", {
+        name: "Alarm notifications",
+        sound: "alarm.ogg",
+        importance: Notifications.AndroidImportance.HIGH,
+      });
+
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== "granted") {
-        alert(
-          "You need to grant notification permissions to receive schedule updates."
-        );
+        console.warn("Notification permissions not granted");
         return;
       }
 
       await Notifications.cancelAllScheduledNotificationsAsync();
 
-      const trigger = new Date();
-      trigger.setHours(21, 0, 0, 0); // Set to 9 PM
-      trigger.setDate(trigger.getDate());
+      if (isNotificationEnabled) {
+        await scheduleNotifications();
+      }
 
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Tomorrow's Schedule",
-          body: getNextDayFirstClass(),
-        },
-        trigger: {
-          hour: 21,
-          minute: 0,
-          repeats: true,
-        },
-      });
+      if (isAlarmEnabled) {
+        await scheduleAlarms();
+      }
     } catch (error) {
       console.error("Failed to setup notifications:", error);
+    }
+  };
+
+  const scheduleNotifications = async () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowString = tomorrow.toLocaleString("en-us", {
+      weekday: "long",
+    });
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `${tomorrowString}'s Schedule`,
+        body: getNextDayFirstClass(),
+      },
+      trigger: {
+        hour: 21,
+        minute: 0,
+        repeats: true,
+        channelId: "schedule",
+      },
+    });
+  };
+
+  const scheduleAlarms = async () => {
+    const todaySchedule = getTodaySchedule;
+    if (todaySchedule.length > 0) {
+      const firstClass = todaySchedule[0];
+      const [startHour, startMinute] =
+        firstClass.Start_Time.split(":").map(Number);
+      const notificationTime = new Date();
+      notificationTime.setHours(startHour - 1, startMinute, 0);
+
+      if (notificationTime > new Date()) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Upcoming Class",
+            body: `You have a class in 1 hour: ${
+              firstClass.Course_Name
+            } at ${convertTime(firstClass.Start_Time)}`,
+          },
+          trigger: {
+            date: notificationTime,
+            channelId: "alarm",
+          },
+        });
+      }
+    }
+  };
+
+  const toggleNotification = async () => {
+    const newStatus = !isNotificationEnabled;
+    setNotificationEnabled(newStatus);
+    await AsyncStorage.setItem("notifications", newStatus.toString());
+
+    if (newStatus) {
+      await scheduleNotifications();
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Notifications On",
+          body: "You have enabled notifications!",
+        },
+        trigger: {
+          seconds: 1,
+          channelId: "schedule",
+        },
+      });
+    } else {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      if (isAlarmEnabled) {
+        await scheduleAlarms();
+      }
+    }
+  };
+
+  const toggleAlarm = async () => {
+    const newStatus = !isAlarmEnabled;
+    setAlarmEnabled(newStatus);
+    await AsyncStorage.setItem("alarm", newStatus.toString());
+
+    if (newStatus) {
+      await scheduleAlarms();
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Alarm On",
+          body: "You have enabled the alarm!",
+        },
+        trigger: {
+          seconds: 0,
+          channelId: "alarm",
+        },
+      });
+    } else {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      if (isNotificationEnabled) {
+        await scheduleNotifications();
+      }
     }
   };
 
@@ -123,12 +263,11 @@ const App = () => {
 
     if (tomorrowSchedule && tomorrowSchedule.length > 0) {
       const firstClass = tomorrowSchedule[0];
-      const newTime =
-        convertTime(firstClass.Start_Time) +
-        " - " +
-        convertTime(firstClass.End_Time);
+      const newTime = `${convertTime(firstClass.Start_Time)} - ${convertTime(
+        firstClass.End_Time
+      )}`;
 
-      return `${tomorrow}'s class at: ${newTime} \n\nBuilding: ${firstClass.Building} || Room No: ${firstClass.Room}\nInstructor: ${firstClass.Instructor}`;
+      return `${tomorrow}'s class at: ${newTime}\n\nBuilding: ${firstClass.Building} || Room No: ${firstClass.Room}\nInstructor: ${firstClass.Instructor}`;
     } else {
       return "You have no classes tomorrow.";
     }
@@ -138,7 +277,7 @@ const App = () => {
     setLoading(true);
     try {
       const id = await AsyncStorage.getItem("ID");
-      setSelectedId(id || "");
+      setSelectedId(id || "Remind Me");
 
       const newData = await AsyncStorage.getItem("GroupSchedule");
       if (newData) {
@@ -159,7 +298,6 @@ const App = () => {
 
   const onLayoutRootView = useCallback(async () => {
     if (isAppReady) {
-      // Hide splash screen immediately
       await SplashScreen.hideAsync();
     }
   }, [isAppReady]);
@@ -169,27 +307,88 @@ const App = () => {
     return schedule[today] || [];
   }, [schedule]);
 
+  const getCurrentClassIndex = useMemo(() => {
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+
+    return getTodaySchedule.findIndex((classInfo) => {
+      const [startHour, startMinute] =
+        classInfo.Start_Time.split(":").map(Number);
+      const [endHour, endMinute] = classInfo.End_Time.split(":").map(Number);
+      const classStartTime = startHour * 60 + startMinute;
+      const classEndTime = endHour * 60 + endMinute;
+      return currentTime >= classStartTime && currentTime < classEndTime;
+    });
+  }, [getTodaySchedule]);
+
+  const isHoliday = useMemo(() => {
+    const today = new Date().toISOString().split("T")[0];
+    return holidays.some((holiday) => holiday.date === today);
+  }, [holidays]);
+
+  const holidayName = useMemo(() => {
+    const today = new Date().toISOString().split("T")[0];
+    const holiday = holidays.find((h) => h.date === today);
+    return holiday ? holiday.name : null;
+  }, [holidays]);
+
+  const DrawerItem = () => (
+    <Menu
+      isNotificationEnabled={isNotificationEnabled}
+      isAlarmEnabled={isAlarmEnabled}
+      toggleNotification={toggleNotification}
+      toggleAlarm={toggleAlarm}
+    />
+  );
+
   const renderScene = SceneMap(
     Object.fromEntries(
       days.map((day) => [
         day,
-        () => (
-          <View className="p-2">
-            <FlatList
-              className="p-2"
-              showsVerticalScrollIndicator={false}
-              data={schedule[day]}
-              renderItem={({ item }) => <ClassCard classInfo={item} />}
-              keyExtractor={(item, index) => `${day}-${item.Period}-${index}`}
-              ListEmptyComponent={<NoClassToday />}
-              getItemLayout={(data, index) => ({
-                length: ITEM_HEIGHT,
-                offset: ITEM_HEIGHT * index,
-                index,
-              })}
-            />
-          </View>
-        ),
+        () => {
+          const currentDate = new Date();
+          const dayIndex = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+          ].indexOf(day);
+          currentDate.setDate(
+            currentDate.getDate() - currentDate.getDay() + dayIndex
+          );
+          const formattedDate = currentDate.toISOString().split("T")[0];
+
+          const isHolidayForThisDay = holidays.some(
+            (holiday) => holiday.date === formattedDate
+          );
+          const holidayForThisDay = holidays.find(
+            (holiday) => holiday.date === formattedDate
+          );
+
+          if (isHolidayForThisDay) {
+            return <Holiday name={holidayForThisDay?.name || "Holiday"} />;
+          }
+          return (
+            <View className="p-2">
+              <FlatList
+                className="p-2"
+                showsVerticalScrollIndicator={false}
+                data={schedule[day]}
+                renderItem={({ item }) => <ClassCard classInfo={item} />}
+                keyExtractor={(item, index) => `${day}-${item.Period}-${index}`}
+                ListEmptyComponent={<NoClassToday />}
+                getItemLayout={(data, index) => ({
+                  length: ITEM_HEIGHT,
+                  offset: ITEM_HEIGHT * index,
+                  index,
+                })}
+              />
+            </View>
+          );
+        },
       ])
     )
   );
@@ -229,7 +428,7 @@ const App = () => {
         onClose={() => setIsOpen(false)}
         renderDrawerContent={DrawerItem}
       >
-        <View className="p-4 bg-indigo-600 flex-row items-center justify-between">
+        <View className="p-2 bg-indigo-600 flex-row items-center justify-between">
           <View className="flex-row gap-2 items-center">
             <Pressable
               onPress={() => setIsOpen(!isOpen)}
@@ -237,8 +436,8 @@ const App = () => {
             >
               <Feather name="menu" size={24} color="white" />
             </Pressable>
-            <Text className="text-white text-lg">
-              {selectedId.replace(/-/g, " ")}
+            <Text className="text-white text-base">
+              {selectedId.replace(/-/g, " - ")}
             </Text>
           </View>
 
@@ -246,7 +445,7 @@ const App = () => {
             onPress={() => setIsPickerModalVisible(true)}
             className="px-3 py-2 rounded-lg"
           >
-            <Feather name="edit" size={24} color="white" />
+            <Feather name="edit" size={20} color="white" />
           </Pressable>
         </View>
 
@@ -269,7 +468,7 @@ const App = () => {
           </View>
         </Modal>
 
-        {!selectedId ? (
+        {selectedId == "Remind Me" ? (
           <ErrorComponent
             message="You haven't selected any class schedule yet. Please select your class."
             onRetry={() => setIsPickerModalVisible(true)}
@@ -277,8 +476,10 @@ const App = () => {
           />
         ) : (
           <>
-            <View className="bg-indigo-100 py-3 h-60">
-              {getTodaySchedule.length > 0 ? (
+            <View className="bg-indigo-100 py-4 h-56">
+              {isHoliday ? (
+                <Holiday name={holidayName || "Holiday"} />
+              ) : getTodaySchedule.length > 0 ? (
                 <>
                   <Text className="text-2xl font-bold text-center text-indigo-800">
                     {new Date().toLocaleString("en-us", { weekday: "long" })}'s
@@ -298,6 +499,11 @@ const App = () => {
                     data={getTodaySchedule}
                     scrollAnimationDuration={1000}
                     renderItem={({ item }) => <ClassCard classInfo={item} />}
+                    defaultIndex={
+                      getCurrentClassIndex !== -1
+                        ? getCurrentClassIndex
+                        : undefined
+                    }
                   />
                 </>
               ) : (
@@ -309,7 +515,10 @@ const App = () => {
               <TabView
                 navigationState={{
                   index,
-                  routes: days.map((day) => ({ key: day, title: day.slice(0, 3) })),
+                  routes: days.map((day) => ({
+                    key: day,
+                    title: day.slice(0, 3),
+                  })),
                 }}
                 renderScene={renderScene}
                 onIndexChange={setIndex}
@@ -321,6 +530,7 @@ const App = () => {
         )}
       </Drawer>
       <StatusBar barStyle="light-content" backgroundColor="#4F46E5" />
+      <UpdateComponent />
     </SafeAreaView>
   );
 };
