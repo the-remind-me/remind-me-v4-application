@@ -24,6 +24,7 @@ interface Groups {
 export async function divideSchedule(schedule: Schedule, Group: string): Promise<string> {
     const groups: Groups = { Group1: {}, Group2: {} };
     await AsyncStorage.setItem("ID", schedule.ID);
+    await AsyncStorage.setItem("Group", Group);
 
     Object.keys(schedule.schedule).forEach((day) => {
         groups.Group1[day] = [];

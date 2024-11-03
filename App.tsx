@@ -1,3 +1,4 @@
+// App.js
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import * as SplashScreen from "expo-splash-screen";
 import { Drawer } from "react-native-drawer-layout";
@@ -17,35 +18,19 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import ClassCard from "./Components/Card";
 import MyPicker from "./Components/picker";
 import { NoClassToday, Holiday } from "./Components/notFound";
-import * as Notifications from "expo-notifications";
 import Feather from "@expo/vector-icons/Feather";
 import Carousel from "react-native-reanimated-carousel";
 import { TabView, SceneMap, TabBar } from "react-native-tab-view";
-import { convertTime } from "./Components/Utils/utils";
 import ErrorComponent from "./Components/error";
 import UpdateComponent from "./Components/update";
+import notificationService from "./Components/Utils/notificationService";
 import axios from "axios";
 import NetInfo from "@react-native-community/netinfo";
 
 SplashScreen.preventAutoHideAsync();
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
 const { width } = Dimensions.get("window");
 const ITEM_HEIGHT = 100;
-
-interface Holiday {
-  _id: string;
-  date: string;
-  name: string;
-  __v: number;
-}
 
 const App: React.FC = () => {
   const [schedule, setSchedule] = useState<{ [key: string]: any[] }>({});
@@ -54,18 +39,24 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isAppReady, setIsAppReady] = useState(false);
   const [isPickerModalVisible, setIsPickerModalVisible] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isDrawerOpen, setDrawerIsOpen] = useState(false);
   const [selectedId, setSelectedId] = useState("");
-  const [holidays, setHolidays] = useState<Holiday[]>([]);
-  const [isNotificationEnabled, setNotificationEnabled] = useState(false);
-  const [isAlarmEnabled, setAlarmEnabled] = useState(false);
+  const [holidays, setHolidays] = useState([]);
+  const [notificationStatus, setNotificationStatus] = useState({
+    notifications: {
+      enabled: true,
+      lastScheduled: null,
+    },
+    alarms: {
+      enabled: true,
+      lastScheduled: null,
+    },
+  });
 
   useEffect(() => {
     const prepare = async () => {
       try {
-        await checkForNewData();
-        await setupNotifications();
-        await fetchHolidays();
+        await Promise.all([checkForNewData(), fetchHolidays()]);
         setIsAppReady(true);
       } catch (e) {
         console.error("Error during app preparation:", e);
@@ -76,18 +67,46 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const loadSettings = async () => {
+    const initializeNotifications = async () => {
       try {
-        const notificationStatus = await AsyncStorage.getItem("notifications");
-        const alarmStatus = await AsyncStorage.getItem("alarm");
-        setNotificationEnabled(notificationStatus === "true");
-        setAlarmEnabled(alarmStatus === "true");
+        await notificationService.initialize();
+        const status = notificationService.getStatus();
+        setNotificationStatus(status);
       } catch (error) {
-        console.error("Error loading settings:", error);
+        console.error("Notification initialization failed:", error);
       }
     };
-    loadSettings();
+
+    initializeNotifications();
   }, []);
+
+  const toggleNotification = useCallback(async () => {
+    try {
+      const enabled = !notificationStatus.notifications.enabled;
+      await notificationService.toggleNotifications(enabled);
+      const newStatus = notificationService.getStatus();
+      setNotificationStatus(newStatus);
+    } catch (error) {
+      console.error("Failed to toggle notifications:", error);
+    }
+  }, [notificationStatus.notifications.enabled]);
+
+  const toggleAlarm = useCallback(async () => {
+    try {
+      const enabled = !notificationStatus.alarms.enabled;
+      await notificationService.toggleAlarms(enabled);
+      const newStatus = notificationService.getStatus();
+      setNotificationStatus(newStatus);
+    } catch (error) {
+      console.error("Failed to toggle alarms:", error);
+    }
+  }, [notificationStatus.alarms.enabled]);
+
+  useEffect(() => {
+    if (schedule && Object.keys(schedule).length > 0) {
+      notificationService.updateSchedule(schedule);
+    }
+  }, [schedule]);
 
   useEffect(() => {
     const today = new Date().toLocaleString("en-us", { weekday: "long" });
@@ -97,16 +116,17 @@ const App: React.FC = () => {
     }
   }, [days]);
 
-  const fetchHolidays = async () => {
+  const fetchHolidays = useCallback(async () => {
     try {
       const storedHolidays = await AsyncStorage.getItem("holidays");
       if (storedHolidays) {
         setHolidays(JSON.parse(storedHolidays));
+        return;
       }
 
       const netInfo = await NetInfo.fetch();
       if (netInfo.isConnected) {
-        const response = await axios.get<Holiday[]>(
+        const response = await axios.get(
           "https://api.remindme.globaltfn.tech/api/holiday/all"
         );
         setHolidays(response.data);
@@ -115,163 +135,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Failed to fetch or sync holidays:", error);
     }
-  };
-
-  const setupNotifications = async () => {
-    try {
-      await Notifications.setNotificationChannelAsync("schedule", {
-        name: "Schedule notifications",
-        sound: "schedule_notification.ogg",
-        importance: Notifications.AndroidImportance.HIGH,
-      });
-      await Notifications.setNotificationChannelAsync("alarm", {
-        name: "Alarm notifications",
-        sound: "alarm.ogg",
-        importance: Notifications.AndroidImportance.HIGH,
-      });
-
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== "granted") {
-        console.warn("Notification permissions not granted");
-        return;
-      }
-
-      await Notifications.cancelAllScheduledNotificationsAsync();
-
-      if (isNotificationEnabled) {
-        await scheduleNotifications();
-      }
-
-      if (isAlarmEnabled) {
-        await scheduleAlarms();
-      }
-    } catch (error) {
-      console.error("Failed to setup notifications:", error);
-    }
-  };
-
-  const scheduleNotifications = async () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowString = tomorrow.toLocaleString("en-us", {
-      weekday: "long",
-    });
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `${tomorrowString}'s Schedule`,
-        body: getNextDayFirstClass(),
-      },
-      trigger: {
-        hour: 21,
-        minute: 0,
-        repeats: true,
-        channelId: "schedule",
-      },
-    });
-  };
-
-  const scheduleAlarms = async () => {
-    const todaySchedule = getTodaySchedule;
-    if (todaySchedule.length > 0) {
-      const firstClass = todaySchedule[0];
-      const [startHour, startMinute] =
-        firstClass.Start_Time.split(":").map(Number);
-      const notificationTime = new Date();
-      notificationTime.setHours(startHour - 1, startMinute, 0);
-
-      if (notificationTime > new Date()) {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Upcoming Class",
-            body: `You have a class in 1 hour: ${
-              firstClass.Course_Name
-            } at ${convertTime(firstClass.Start_Time)}`,
-          },
-          trigger: {
-            date: notificationTime,
-            channelId: "alarm",
-          },
-        });
-      }
-    }
-  };
-
-  const toggleNotification = async () => {
-    const newStatus = !isNotificationEnabled;
-    setNotificationEnabled(newStatus);
-    await AsyncStorage.setItem("notifications", newStatus.toString());
-
-    if (newStatus) {
-      await scheduleNotifications();
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Notifications On",
-          body: "You have enabled notifications!",
-        },
-        trigger: {
-          seconds: 1,
-          channelId: "schedule",
-        },
-      });
-    } else {
-      await Notifications.cancelAllScheduledNotificationsAsync();
-      if (isAlarmEnabled) {
-        await scheduleAlarms();
-      }
-    }
-  };
-
-  const toggleAlarm = async () => {
-    const newStatus = !isAlarmEnabled;
-    setAlarmEnabled(newStatus);
-    await AsyncStorage.setItem("alarm", newStatus.toString());
-
-    if (newStatus) {
-      await scheduleAlarms();
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Alarm On",
-          body: "You have enabled the alarm!",
-        },
-        trigger: {
-          seconds: 0,
-          channelId: "alarm",
-        },
-      });
-    } else {
-      await Notifications.cancelAllScheduledNotificationsAsync();
-      if (isNotificationEnabled) {
-        await scheduleNotifications();
-      }
-    }
-  };
-
-  const getNextDayFirstClass = () => {
-    const days = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
-    const today = new Date().getDay();
-    const tomorrow = days[(today + 1) % 7];
-    const tomorrowSchedule = schedule[tomorrow];
-
-    if (tomorrowSchedule && tomorrowSchedule.length > 0) {
-      const firstClass = tomorrowSchedule[0];
-      const newTime = `${convertTime(firstClass.Start_Time)} - ${convertTime(
-        firstClass.End_Time
-      )}`;
-
-      return `${tomorrow}'s class at: ${newTime}\n\nBuilding: ${firstClass.Building} || Room No: ${firstClass.Room}\nInstructor: ${firstClass.Instructor}`;
-    } else {
-      return "You have no classes tomorrow.";
-    }
-  };
+  }, []);
 
   const checkForNewData = useCallback(async () => {
     setLoading(true);
@@ -289,10 +153,9 @@ const App: React.FC = () => {
         );
         setDays(Object.keys(parsedNewData));
       }
+      setLoading(false);
     } catch (error) {
       console.error("Failed to check for new data:", error);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -332,106 +195,124 @@ const App: React.FC = () => {
     return holiday ? holiday.name : null;
   }, [holidays]);
 
-  const DrawerItem = () => (
-    <Menu
-      isNotificationEnabled={isNotificationEnabled}
-      isAlarmEnabled={isAlarmEnabled}
-      toggleNotification={toggleNotification}
-      toggleAlarm={toggleAlarm}
-    />
+  const DrawerItem = useMemo(
+    () => (
+      <Menu
+        isNotificationEnabled={notificationStatus.notifications.enabled}
+        isAlarmEnabled={notificationStatus.alarms.enabled}
+        toggleNotification={toggleNotification}
+        toggleAlarm={toggleAlarm}
+      />
+    ),
+    [notificationStatus, toggleNotification, toggleAlarm]
   );
 
-  const renderScene = SceneMap(
-    Object.fromEntries(
-      days.map((day) => [
-        day,
-        () => {
-          const currentDate = new Date();
-          const dayIndex = [
-            "Sunday",
-            "Monday",
-            "Tuesday",
-            "Wednesday",
-            "Thursday",
-            "Friday",
-            "Saturday",
-          ].indexOf(day);
-          currentDate.setDate(
-            currentDate.getDate() - currentDate.getDay() + dayIndex
-          );
-          const formattedDate = currentDate.toISOString().split("T")[0];
+  const MemoizedClassCard = React.memo(ClassCard);
 
-          const isHolidayForThisDay = holidays.some(
-            (holiday) => holiday.date === formattedDate
-          );
-          const holidayForThisDay = holidays.find(
-            (holiday) => holiday.date === formattedDate
-          );
+  const renderScene = useMemo(
+    () =>
+      SceneMap(
+        Object.fromEntries(
+          days.map((day) => [
+            day,
+            () => {
+              const currentDate = new Date();
+              const dayIndex = [
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+              ].indexOf(day);
+              currentDate.setDate(
+                currentDate.getDate() - currentDate.getDay() + dayIndex
+              );
+              const formattedDate = currentDate.toISOString().split("T")[0];
 
-          if (isHolidayForThisDay) {
-            return <Holiday name={holidayForThisDay?.name || "Holiday"} />;
-          }
-          return (
-            <View className="p-2">
-              <FlatList
-                className="p-2"
-                showsVerticalScrollIndicator={false}
-                data={schedule[day]}
-                renderItem={({ item }) => <ClassCard classInfo={item} />}
-                keyExtractor={(item, index) => `${day}-${item.Period}-${index}`}
-                ListEmptyComponent={<NoClassToday />}
-                getItemLayout={(data, index) => ({
-                  length: ITEM_HEIGHT,
-                  offset: ITEM_HEIGHT * index,
-                  index,
-                })}
-              />
-            </View>
-          );
-        },
-      ])
-    )
+              const isHolidayForThisDay = holidays.some(
+                (holiday) => holiday.date === formattedDate
+              );
+              const holidayForThisDay = holidays.find(
+                (holiday) => holiday.date === formattedDate
+              );
+
+              if (isHolidayForThisDay) {
+                return <Holiday name={holidayForThisDay?.name || "Holiday"} />;
+              }
+              return (
+                <View className="pb-1">
+                  <FlatList
+                    className="p-4"
+                    showsVerticalScrollIndicator={false}
+                    data={schedule[day]}
+                    refreshing={loading}
+                    renderItem={({ item }) => (
+                      <MemoizedClassCard classInfo={item} />
+                    )}
+                    keyExtractor={(item, index) =>
+                      `${day}-${item.Period}-${index}`
+                    }
+                    ListEmptyComponent={<NoClassToday />}
+                    getItemLayout={(data, index) => ({
+                      length: ITEM_HEIGHT,
+                      offset: ITEM_HEIGHT * index,
+                      index,
+                    })}
+                    windowSize={10}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    updateCellsBatchingPeriod={50}
+                  />
+                </View>
+              );
+            },
+          ])
+        )
+      ),
+    [days, holidays, schedule]
   );
 
-  const renderTabBar = (props: any) => (
-    <TabBar
-      {...props}
-      indicatorStyle={{
-        backgroundColor: "#4F46E5",
-        height: 3,
-        borderRadius: 999,
-      }}
-      style={{ backgroundColor: "#EEF2FF" }}
-      labelStyle={{ color: "#4F46E5", fontSize: 13 }}
-    />
+  const renderTabBar = useCallback(
+    (props: any) => (
+      <View>
+        <TabBar
+          {...props}
+          activeColor="#241df0"
+          inactiveColor="#0e0e82"
+          indicatorStyle={{
+            backgroundColor: "#4F46E5",
+            height: 2,
+          }}
+          style={{ backgroundColor: "#EEF2FF" }}
+          labelStyle={{ fontSize: 13 }}
+          pressColor="transparent"
+          pressOpacity={1}
+        />
+      </View>
+    ),
+    []
   );
 
   if (!isAppReady) {
     return null;
   }
 
-  if (loading) {
-    return (
-      <View className="flex-1 justify-center items-center bg-indigo-100">
-        <ActivityIndicator size="large" color="#4F46E5" />
-        <Text className="mt-4 text-lg text-indigo-700">Loading...</Text>
-      </View>
-    );
-  }
-
   return (
     <SafeAreaView className="flex-1" onLayout={onLayoutRootView}>
       <Drawer
-        open={isOpen}
+        drawerStyle={{ width: "80%" }}
+        open={isDrawerOpen}
         drawerType="front"
-        onOpen={() => setIsOpen(true)}
-        onClose={() => setIsOpen(false)}
-        renderDrawerContent={DrawerItem}
+        onOpen={() => setDrawerIsOpen(true)}
+        onClose={() => setDrawerIsOpen(false)}
+        renderDrawerContent={() => DrawerItem}
       >
         <View className="p-2 bg-indigo-600 flex-row items-center justify-between">
           <View className="flex-row gap-2 items-center">
             <Pressable
-              onPress={() => setIsOpen(!isOpen)}
+              onPress={() => setDrawerIsOpen(!isDrawerOpen)}
               className="px-2 py-2 rounded-lg"
             >
               <Feather name="menu" size={24} color="white" />
@@ -463,6 +344,9 @@ const App: React.FC = () => {
                   setLoading(true);
                   checkForNewData();
                 }}
+                justClose={() => {
+                  setIsPickerModalVisible(false);
+                }}
               />
             </View>
           </View>
@@ -476,42 +360,57 @@ const App: React.FC = () => {
           />
         ) : (
           <>
-            <View className="bg-indigo-100 py-4 h-56">
+            <View className="bg-indigo-100 h-48">
               {isHoliday ? (
                 <Holiday name={holidayName || "Holiday"} />
               ) : getTodaySchedule.length > 0 ? (
                 <>
-                  <Text className="text-2xl font-bold text-center text-indigo-800">
-                    {new Date().toLocaleString("en-us", { weekday: "long" })}'s
-                    Schedule
-                  </Text>
-                  <Carousel
-                    loop={false}
-                    mode="parallax"
-                    modeConfig={{
-                      parallaxScrollingScale: 0.9,
-                      parallaxScrollingOffset: 50,
-                      parallaxAdjacentItemScale: 0.8,
-                    }}
-                    width={width}
-                    height={200}
-                    autoPlay={false}
-                    data={getTodaySchedule}
-                    scrollAnimationDuration={1000}
-                    renderItem={({ item }) => <ClassCard classInfo={item} />}
-                    defaultIndex={
-                      getCurrentClassIndex !== -1
-                        ? getCurrentClassIndex
-                        : undefined
-                    }
-                  />
+                  {loading ? (
+                    <View className="flex-1 justify-center items-center">
+                      <ActivityIndicator size="large" color="#4F46E5" />
+                      <Text className="text-lg text-indigo-700">
+                        Loading...
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      <Text className="text-2xl font-bold text-center text-indigo-800">
+                        {new Date().toLocaleString("en-us", {
+                          weekday: "long",
+                        })}
+                        's Schedule
+                      </Text>
+                      <Carousel
+                        loop={false}
+                        mode="parallax"
+                        modeConfig={{
+                          parallaxScrollingScale: 0.9,
+                          parallaxScrollingOffset: 55,
+                          parallaxAdjacentItemScale: 0.8,
+                        }}
+                        width={width}
+                        height={200}
+                        autoPlay={false}
+                        data={getTodaySchedule}
+                        scrollAnimationDuration={500}
+                        renderItem={({ item }) => (
+                          <MemoizedClassCard classInfo={item} />
+                        )}
+                        defaultIndex={
+                          getCurrentClassIndex !== -1
+                            ? getCurrentClassIndex
+                            : undefined
+                        }
+                      />
+                    </>
+                  )}
                 </>
               ) : (
                 <NoClassToday />
               )}
             </View>
 
-            <View className="flex-1 bg-indigo-100">
+            <View className="flex-1 bg-[#EEF2FF]">
               <TabView
                 navigationState={{
                   index,
@@ -524,6 +423,7 @@ const App: React.FC = () => {
                 onIndexChange={setIndex}
                 initialLayout={{ width }}
                 renderTabBar={renderTabBar}
+                lazy
               />
             </View>
           </>

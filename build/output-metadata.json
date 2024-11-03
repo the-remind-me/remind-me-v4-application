@@ -4,7 +4,7 @@
     "type": "APK",
     "kind": "Directory"
   },
-  "applicationId": "com.biplabroy.remind_me_test",
+  "applicationId": "com.biplabroy.remindme",
   "variantName": "release",
   "elements": [
     {
@@ -17,7 +17,7 @@
       ],
       "attributes": [],
       "versionCode": 1,
-      "versionName": "4.1.0",
+      "versionName": "4.3.0",
       "outputFile": "app-armeabi-v7a-release.apk"
     },
     {
@@ -30,34 +30,8 @@
       ],
       "attributes": [],
       "versionCode": 1,
-      "versionName": "4.1.0",
+      "versionName": "4.3.0",
       "outputFile": "app-arm64-v8a-release.apk"
-    },
-    {
-      "type": "ONE_OF_MANY",
-      "filters": [
-        {
-          "filterType": "ABI",
-          "value": "x86_64"
-        }
-      ],
-      "attributes": [],
-      "versionCode": 1,
-      "versionName": "4.1.0",
-      "outputFile": "app-x86_64-release.apk"
-    },
-    {
-      "type": "ONE_OF_MANY",
-      "filters": [
-        {
-          "filterType": "ABI",
-          "value": "x86"
-        }
-      ],
-      "attributes": [],
-      "versionCode": 1,
-      "versionName": "4.1.0",
-      "outputFile": "app-x86-release.apk"
     }
   ],
   "elementType": "File"

@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 interface ErrorProps {
-  message?: string;
-  onRetry?: () => void;
-  retryText?: string;
+  message: string;
+  onRetry: () => void;
+  retryText: string;
 }
 
 const ErrorPage: React.FC<ErrorProps> = ({ message, onRetry, retryText }) => {

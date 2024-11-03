@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
   ScrollView,
   ActivityIndicator,
   ToastAndroid,
+  Pressable,
 } from "react-native";
 import { Dropdown } from "react-native-element-dropdown";
 import { divideSchedule } from "./Utils/DivideGroups";
@@ -15,11 +15,12 @@ import ErrorPage from "./error";
 
 interface MyPickerProps {
   onClose: () => void;
+  justClose: () => void;
 }
 
 const API_URL = "https://api.remindme.globaltfn.tech";
 
-const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
+const MyPicker: React.FC<MyPickerProps> = ({ onClose, justClose }) => {
   const [data, setData] = useState<string[]>([]);
   const [selectedUniversity, setSelectedUniversity] = useState<string>("");
   const [selectedProgram, setSelectedProgram] = useState<string>("");
@@ -31,6 +32,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
   const [selectedId, setSelectedId] = useState<string>("");
   const [group, setGroup] = useState<string>("Group 1");
   const [isLoading, setIsLoading] = useState(false);
+  const [miniLoading, setMiniLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
 
   const checkConnection = useCallback(async () => {
@@ -57,7 +59,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
         throw new Error(`HTTP error! status: ${response.status}`);
       const fetchedData = await response.json();
       setData(fetchedData.ids);
-      setIsLoading(false);  
+      setIsLoading(false);
     } catch (error) {
       console.error("Failed to fetch schedule:", error);
       ToastAndroid.show(
@@ -144,7 +146,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
   }, [selectedSection, group]);
 
   const getScheduleFromBackend = async () => {
-    setIsLoading(true);
+    setMiniLoading(true);
     try {
       const isConnected = await checkConnection();
       if (!isConnected) {
@@ -152,7 +154,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
           "Please connect to the internet and try again.",
           ToastAndroid.LONG
         );
-        setIsLoading(false);
+        setMiniLoading(false);
         return;
       }
 
@@ -170,7 +172,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
         ToastAndroid.LONG
       );
     } finally {
-      setIsLoading(false);
+      setMiniLoading(false);
       onClose();
     }
   };
@@ -179,9 +181,9 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
     <ScrollView className="w-full transition-all duration-300">
       <View className="flex-row justify-between items-center mb-4">
         <Text className="text-xl font-bold">Select Schedule</Text>
-        <TouchableOpacity onPress={onClose} className="p-2">
+        <Pressable onPress={justClose} className="p-2">
           <Feather name="x" size={24} color="black" />
-        </TouchableOpacity>
+        </Pressable>
       </View>
       {isLoading ? (
         <View className="flex-1 justify-center items-center p-4 h-96">
@@ -190,7 +192,11 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
         </View>
       ) : !isConnected ? (
         <View className="flex-1 justify-center items-center p-4">
-          <ErrorPage message="Please check your internet connection and try again." onRetry={onRefresh}/>
+          <ErrorPage
+            message="Please check your internet connection and try again."
+            onRetry={onRefresh}
+            retryText="Refresh"
+          />
         </View>
       ) : (
         <View className="flex-1 items-center justify-center p-4">
@@ -263,17 +269,16 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
               className="bg-white rounded-md mb-4 h-12 p-2 border border-gray-300"
             />
 
-            <TouchableOpacity
+            <Pressable
               onPress={() => {
                 getScheduleFromBackend();
-                onClose();
               }}
               disabled={!selectedSection || isLoading}
               className={`mt-6 p-4 rounded-md flex-row justify-center items-center ${
                 selectedSection && !isLoading ? "bg-blue-500" : "bg-gray-400"
               }`}
             >
-              {isLoading ? (
+              {miniLoading ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
                 <>
@@ -283,7 +288,7 @@ const MyPicker: React.FC<MyPickerProps> = ({ onClose }) => {
                   </Text>
                 </>
               )}
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       )}
