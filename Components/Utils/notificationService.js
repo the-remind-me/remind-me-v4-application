@@ -1,5 +1,4 @@
 // notificationService.js
-import * as ExpoAlarm from "expo-alarm";
 import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
 import * as BackgroundFetch from "expo-background-fetch";
@@ -9,7 +8,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const BACKGROUND_FETCH_TASK = "CLASS_SCHEDULE_FETCH";
 const STORAGE_KEYS = {
   NOTIFICATION_ENABLED: "notificationEnabled",
-  ALARM_ENABLED: "alarmEnabled",
   GROUP: "Group",
 };
 
@@ -20,10 +18,6 @@ class NotificationService {
     this.selectedGroup = null;
     this.state = {
       notifications: {
-        enabled: true,
-        lastScheduled: null,
-      },
-      alarms: {
         enabled: true,
         lastScheduled: null,
       },
@@ -42,19 +36,16 @@ class NotificationService {
 
   async loadSettings() {
     try {
-      const [notificationEnabled, alarmEnabled, group] = await Promise.all([
+      const [notificationEnabled, group] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.NOTIFICATION_ENABLED),
-        AsyncStorage.getItem(STORAGE_KEYS.ALARM_ENABLED),
         AsyncStorage.getItem(STORAGE_KEYS.GROUP),
       ]);
 
       this.state.notifications.enabled = notificationEnabled !== "false";
-      this.state.alarms.enabled = alarmEnabled !== "false";
       this.selectedGroup = group || null;
 
       // console.log("📱 Loaded settings:", {
       //   notifications: this.state.notifications.enabled,
-      //   alarms: this.state.alarms.enabled,
       //   group: this.selectedGroup,
       // });
     } catch (error) {
@@ -64,16 +55,10 @@ class NotificationService {
 
   async saveSettings() {
     try {
-      await Promise.all([
-        AsyncStorage.setItem(
-          STORAGE_KEYS.NOTIFICATION_ENABLED,
-          String(this.state.notifications.enabled)
-        ),
-        AsyncStorage.setItem(
-          STORAGE_KEYS.ALARM_ENABLED,
-          String(this.state.alarms.enabled)
-        ),
-      ]);
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.NOTIFICATION_ENABLED,
+        String(this.state.notifications.enabled)
+      );
     } catch (error) {
       console.error("Failed to save notification settings:", error);
     }
@@ -93,32 +78,10 @@ class NotificationService {
     return this.state.notifications.enabled;
   }
 
-  async toggleAlarms(enabled) {
-    // console.log("⏰ Toggling alarms:", enabled);
-    this.state.alarms.enabled = enabled;
-    await this.saveSettings();
-
-    if (!enabled) {
-      ExpoAlarm.dismissAlarm({
-        searchMode: "android.all",
-      });
-    } else {
-      await this.scheduleNotifications(); // This will schedule new alarms if needed
-    }
-
-    return this.state.alarms.enabled;
-  }
-
   async cancelAllNotifications() {
     // console.log("🚫 Cancelling all notifications");
     await Notifications.cancelAllScheduledNotificationsAsync();
     this.state.notifications.lastScheduled = null;
-  }
-
-  async cancelAllAlarms() {
-    // console.log("🚫 Cancelling all alarms");
-    await ExpoAlarm.cancelAllAlarms();
-    this.state.alarms.lastScheduled = null;
   }
 
   async initialize() {
@@ -285,13 +248,8 @@ class NotificationService {
         // console.log("✅ Notifications scheduled successfully");
       }
 
-      if (this.state.alarms.enabled) {
-        promises.push(this.schedulePreClassAlarm(todayClass, classTime));
-        // console.log("✅ Alarms scheduled successfully");
-      }
-
       await Promise.all(promises);
-      // console.log("✅ Notifications and alarms scheduled successfully");
+      // console.log("✅ Notifications scheduled successfully");
     } catch (error) {
       console.error("❌ Failed to schedule notifications:", error);
     }
@@ -321,36 +279,11 @@ class NotificationService {
     return notification;
   }
 
-  async schedulePreClassAlarm(nextClass, alarmTime) {
-    // console.log(
-    //   "⏰ Scheduling pre-class alarm for:",
-    //   nextClass.classInfo.Course_Name
-    // );
-
-    if (!isNaN(alarmTime.getTime())) {
-      await ExpoAlarm.setAlarm({
-        hour: alarmTime.getHours(),
-        minutes: alarmTime.getMinutes(),
-        message: `⏰ CLASS STARTING SOON - ${nextClass.classInfo.Group}`,
-        vibrate: true,
-        skipUi: true,
-      });
-
-      this.state.alarms.lastScheduled = new Date();
-    } else {
-      console.error("❌ Invalid alarmTime:", alarmTime);
-    }
-  }
-
   getStatus() {
     return {
       notifications: {
         enabled: this.state.notifications.enabled,
         lastScheduled: this.state.notifications.lastScheduled,
-      },
-      alarms: {
-        enabled: this.state.alarms.enabled,
-        lastScheduled: this.state.alarms.lastScheduled,
       },
     };
   }
