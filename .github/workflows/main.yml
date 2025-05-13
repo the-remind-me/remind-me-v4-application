@@ -1,0 +1,111 @@
+name: Deploy APKs and Create Releases
+
+on:
+  push:
+    paths:
+      - 'build/**'
+      - 'app.json'
+
+permissions:
+  contents: write
+
+jobs:
+  build: 
+    runs-on: ubuntu-latest 
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '20'
+
+      - name: Set up Java and Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Expo CLI
+        run: npm install -g expo-cli
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Expo Prebuild
+        run: expo prebuild --platform android --non-interactive
+
+      - name: Enable ABI splits in build.gradle
+        run: |
+          GRADLE_FILE="android/app/build.gradle"
+          awk '/splits \{/,/\}/ { if ($0 ~ /enable/) { print "        enable true"; next } } { print }' "$GRADLE_FILE" > temp && mv temp "$GRADLE_FILE"
+          echo '
+          android {
+              ...
+              splits {
+                  abi {
+                      enable true
+                      reset()
+                      include "armeabi-v7a", "arm64-v8a"
+                      universalApk false
+                  }
+              }
+          }' >> "$GRADLE_FILE"
+
+      - name: Build APKs
+        run: ./gradlew assembleRelease -p android
+
+      - name: Read version from app.json
+        id: version
+        run: |
+          echo "VERSION=$(node -p "require('./app.json').expo.version")" >> $GITHUB_ENV
+
+      - name: Create Release Folder
+        run: mkdir -p release
+
+      - name: Create GitHub Releases and Upload APKs
+        run: |
+          ABIS=("armeabi-v7a" "arm64-v8a")
+          for ABI in "${ABIS[@]}"; do
+            APK_PATH="android/app/build/outputs/apk/release/app-${ABI}-release.apk"
+            if [ -f "$APK_PATH" ]; then
+              release_name="Release v${{ env.VERSION }} - $ABI"
+              tag_name="v${{ env.VERSION }}-$ABI"
+              echo "Creating release: $release_name"
+              RESPONSE=$(curl -s -X POST "https://api.github.com/repos/${{ github.repository }}/releases" \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -d "{\"tag_name\": \"$tag_name\", \"name\": \"$release_name\", \"body\": \"APK for version ${{ env.VERSION }} - ABI $ABI has been released.\"}")
+
+              upload_url=$(echo $RESPONSE | jq -r .upload_url | sed "s/{.*}//")
+
+              echo "Uploading APK: $APK_PATH"
+              curl -s -X POST "$upload_url?name=app-${ABI}-v${{ env.VERSION }}.apk" \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Content-Type: application/vnd.android.package-archive" \
+                --data-binary @"$APK_PATH"
+            else
+              echo "APK for ABI $ABI not found at $APK_PATH"
+            fi
+          done
+
+      - name: Create version.json
+        run: |
+          echo '{ "version": "'${{ env.VERSION }}'", "apks": [' > release/version.json
+          ABIS=("armeabi-v7a" "arm64-v8a")
+          for ABI in "${ABIS[@]}"; do
+            APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}-${ABI}/app-${ABI}-v${{ env.VERSION }}.apk"
+            echo '  {"abi": "'$ABI'", "url": "'$APK_URL'"},' >> release/version.json
+          done
+          sed -i '$ s/,$//' release/version.json
+          echo ']}' >> release/version.json
+
+      - name: Create .nojekyll
+        run: echo > release/.nojekyll
+
+      - name: Check version.json
+        run: cat release/version.json
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: release
