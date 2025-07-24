@@ -27,14 +27,11 @@ jobs:
       - name: Set up Java and Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Expo CLI
-        run: npm install -g expo-cli
-
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
       - name: Run Expo Prebuild
-        run: expo prebuild --platform android --non-interactive
+        run: npx expo prebuild
 
       - name: Build APKs
         run: |
