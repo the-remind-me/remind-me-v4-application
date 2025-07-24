@@ -1,82 +1,102 @@
-name: Deploy APKs and Create Releases
+name: Build and Push APKs to App Branch
 
 on:
   push:
+    branches: [main]
     paths:
-      - 'build/**'
+      - 'app.json'
+      - 'android/**'
+      - 'expo/**'
 
 permissions:
   contents: write
 
 jobs:
-  build: 
-    runs-on: ubuntu-latest 
+  build:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: 20
+
+      - name: Set up Java and Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Expo CLI
+        run: npm install -g expo-cli
+
+      - name: Install Dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Run Expo Prebuild
+        run: expo prebuild --platform android --non-interactive
+
+      - name: Build APKs
+        run: |
+          echo "Enabling ABI splits"
+          echo '
+          android {
+              ...
+              splits {
+                  abi {
+                      enable true
+                      reset()
+                      include "armeabi-v7a", "arm64-v8a"
+                      universalApk false
+                  }
+              }
+          }' >> android/app/build.gradle
+          
+          cd android && ./gradlew assembleRelease
 
       - name: Read version from app.json
         id: version
         run: |
           echo "VERSION=$(node -p "require('./app.json').expo.version")" >> $GITHUB_ENV
 
-      - name: Create Release Folder
-        run: mkdir -p release
+      - name: Create Output Directory
+        run: |
+          mkdir -p release
+          mkdir -p build
 
-      - name: Create GitHub Releases and Upload APKs
-        id: create_releases
+      - name: Copy APKs and Create version.json
         run: |
           ABIS=("armeabi-v7a" "arm64-v8a")
+          echo '{ "version": "'${{ env.VERSION }}'", "apks": [' > release/version.json
+
           for ABI in "${ABIS[@]}"; do
-            APK_PATH="build/app-${ABI}-release.apk"
-            if [ -f "$APK_PATH" ]; then
-              release_name="Release v${{ env.VERSION }} - $ABI"
-              tag_name="v${{ env.VERSION }}-$ABI"
-              echo "Creating release: $release_name"
-              RESPONSE=$(curl -s -X POST "https://api.github.com/repos/${{ github.repository }}/releases" \
-                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -d "{\"tag_name\": \"$tag_name\", \"name\": \"$release_name\", \"body\": \"APK for version ${{ env.VERSION }} - ABI $ABI has been released.\"}")
-
-              upload_url=$(echo $RESPONSE | jq -r .upload_url | sed "s/{.*}//")
-
-              echo "Uploading APK: $APK_PATH"
-              curl -s -X POST "$upload_url?name=app-${ABI}-v${{ env.VERSION }}.apk" \
-                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Content-Type: application/vnd.android.package-archive" \
-                --data-binary @"$APK_PATH"
-            else
-              echo "APK for ABI $ABI not found at $APK_PATH"
+            APK_SRC="android/app/build/outputs/apk/release/app-${ABI}-release.apk"
+            APK_DEST="build/app-${ABI}-v${{ env.VERSION }}.apk"
+            if [ -f "$APK_SRC" ]; then
+              cp "$APK_SRC" "$APK_DEST"
+              echo '  { "abi": "'$ABI'", "file": "'$(basename "$APK_DEST")'" },' >> release/version.json
             fi
           done
 
-      - name: Create version.json
-        run: |
-          echo '{ "version": "'${{ env.VERSION }}'", "apks": [' > release/version.json
-          ABIS=("armeabi-v7a" "arm64-v8a")
-          for ABI in "${ABIS[@]}"; do
-            APK_URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}-${ABI}/app-${ABI}-v${{ env.VERSION }}.apk"
-            echo '  {"abi": "'$ABI'", "url": "'$APK_URL'"},' >> release/version.json
-          done
           sed -i '$ s/,$//' release/version.json
           echo ']}' >> release/version.json
+          echo > release/.nojekyll
 
-      - name: Create a .nojekyll file
-        run: echo > release/.nojekyll  # Ensure GitHub Pages skips Jekyll processing
-
-      - name: List working directory contents
-        run: ls -R  # Check contents of the working directory
-
-      - name: Check version.json contents
-        run: cat release/version.json  # Ensure version.json was created successfully
-
-      - name: Deploy to GitHub Pages
+      - name: Push to `app` branch
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }} 
-          publish_dir: release
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build
+          destination_dir: .   # to push in root
+          publish_branch: app
+          keep_files: true
+
+      - name: Push release metadata
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git checkout -B app
+          cp -r release/* .
+          git add version.json .nojekyll
+          git commit -m "Update version metadata for v${{ env.VERSION }}"
+          git push origin app --force
