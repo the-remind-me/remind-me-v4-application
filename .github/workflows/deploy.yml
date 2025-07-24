@@ -33,23 +33,29 @@ jobs:
       - name: Run Expo Prebuild
         run: npx expo prebuild
 
-      - name: Build APKs
+      - name: Enable ABI splits and build APKs
         run: |
-          echo "Enabling ABI splits"
-          echo '
-          android {
-              ...
-              splits {
-                  abi {
-                      enable true
-                      reset()
-                      include "armeabi-v7a", "arm64-v8a"
-                      universalApk false
-                  }
-              }
-          }' >> android/app/build.gradle
-          
+          echo "Injecting ABI splits into build.gradle..."
+          awk '
+          BEGIN { inside_android=0 }
+          {
+            if ($0 ~ /android\s*{/) { inside_android=1 }
+            print
+            if (inside_android && $0 ~ /^}/) {
+              print "    splits {"
+              print "        abi {"
+              print "            enable true"
+              print "            reset()"
+              print "            include \"armeabi-v7a\", \"arm64-v8a\""
+              print "            universalApk false"
+              print "        }"
+              print "    }"
+              inside_android=0
+            }
+          }' android/app/build.gradle > android/app/build.gradle.tmp && mv android/app/build.gradle.tmp android/app/build.gradle
+      
           cd android && ./gradlew assembleRelease
+
 
       - name: Read version from app.json
         id: version
