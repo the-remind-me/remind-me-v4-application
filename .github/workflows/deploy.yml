@@ -55,7 +55,7 @@ jobs:
             }
           }' android/app/build.gradle > android/app/build.gradle.tmp && mv android/app/build.gradle.tmp android/app/build.gradle
       
-          cd android && ./gradlew assembleRelease
+          cd android && cat android/app/build.gradle
 
 
       - name: Read version from app.json
